@@ -1,0 +1,14 @@
+{
+  "_output_dir": "/home/niklas/drescherlab",
+  "_template": "gh:cjolowicz/cookiecutter-hypermodern-python",
+  "author": "Niklas Breitenbach-Netter",
+  "copyright_year": "2024",
+  "development_status": "Development Status :: 1 - Planning",
+  "email": "niknett@gmail.com",
+  "friendly_name": "Multi-agent reinforcement learning for credit theory of money and #MMT.",
+  "github_user": "gatoniel",
+  "license": "GPL-3.0",
+  "package_name": "credit_mmt_marl",
+  "project_name": "credit-mmt-marl",
+  "version": "0.0.0"
+}
