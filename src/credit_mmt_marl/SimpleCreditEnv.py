@@ -7,6 +7,14 @@ from gymnasium.spaces import Tuple, Box, Dict
 
 from pettingzoo import ParallelEnv
 
+
+# OBSERVATION dict items
+PARAMS = "parameter"
+RESOURCES = "resources"
+ACCOUNTS = "accounts"
+LAST_PRICES = "last prices"
+
+# ACTION dict items
 USE_GOODS = "use goods"
 USE_CAPITAL = "use capital"
 BUY_GOODS = "buy goods"
@@ -114,7 +122,7 @@ class SimpleCreditEnvV0(ParallelEnv):
         # prices has length 4 * num_players**2
         prices = np.concatenate(
             [
-                np.sort(x)
+                np.sort(x, axis=None)
                 for x in [
                     self.demand_prices_goods,
                     self.demand_prices_capital,
@@ -125,12 +133,12 @@ class SimpleCreditEnvV0(ParallelEnv):
         )
 
         return {
-            self.agents[i]: (
-                parameters[i],
-                resources[i],
-                self.accounts[i],
-                prices,
-            )
+            self.agents[i]: {
+                PARAMS: parameters[i],
+                RESOURCES: resources[i],
+                ACCOUNTS: self.accounts[i],
+                LAST_PRICES: prices,
+            }
             for i in range(self.num_players)
         }
 
@@ -159,12 +167,14 @@ class SimpleCreditEnvV0(ParallelEnv):
         rel_prices = np.expand_dims(demand, axis=1) / np.expand_dims(
             order, axis=0
         )
-        num_greater_1 = np.sum(rel_prices > 1)
+        num_greater_1 = np.sum(rel_prices >= 1)
         inds = np.argsort(rel_prices, axis=None)[::-1]
-        return np.stack(
+        un_inds = np.stack(
             np.unravel_index(inds[:num_greater_1], (self.num_players,) * 3),
             axis=1,
         )
+        diff_seller_buyer = un_inds[:, 0] != un_inds[:, 1]
+        return un_inds[diff_seller_buyer, :]
 
     def get_exchange(self, buyer, seller, currency, prices, demand, offer):
         unit_price = prices[buyer, currency]
@@ -189,6 +199,14 @@ class SimpleCreditEnvV0(ParallelEnv):
         sold[seller] += exchange  # how much needs to be substracted later
         traded[buyer] += exchange
         demand[buyer] -= exchange  # how much remains to be bought
+
+    def total_resources(self):
+        return (
+            self.goods.sum()
+            + self.traded_goods.sum()
+            + self.capital.sum()
+            + self.traded_capital.sum()
+        )
 
     def step(self, actions):
         """Takes in an action for the current agent (specified by agent_selection).
@@ -351,7 +369,7 @@ class SimpleCreditEnvV0(ParallelEnv):
 
         # Check truncation conditions (overwrites termination conditions)
         truncations = {a: False for a in self.agents}
-        if self.timestep > 500:
+        if self.timestep > 200:
             truncations = {a: True for a in self.agents}
         self.timestep += 1
 
@@ -381,13 +399,15 @@ class SimpleCreditEnvV0(ParallelEnv):
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
         # gymnasium spaces are defined and documented here: https://gymnasium.farama.org/api/spaces/
-        return Tuple(
-            (
-                Box(0.0, 1.0, shape=(2,)),
-                Box(0.0, np.inf, shape=(4,)),
-                Box(-np.inf, np.inf, shape=(self.num_players,)),
-                Box(0.0, np.inf, shape=(4 * self.num_players**2,)),
-            )
+        return Dict(
+            {
+                PARAMS: Box(0.0, 1.0, shape=(2,)),
+                RESOURCES: Box(0.0, np.inf, shape=(4,)),
+                ACCOUNTS: Box(-np.inf, np.inf, shape=(self.num_players,)),
+                LAST_PRICES: Box(
+                    0.0, np.inf, shape=(4 * self.num_players**2,)
+                ),
+            }
         )
 
     # Action space should be defined here.
