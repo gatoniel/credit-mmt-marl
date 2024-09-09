@@ -12,7 +12,8 @@ from pettingzoo import ParallelEnv
 PARAMS = "parameter"
 RESOURCES = "resources"
 ACCOUNTS = "accounts"
-LAST_PRICES = "last prices"
+LAST_GOODS_TRANSACTIONS = "last goods transactions"
+LAST_CAPITAL_TRANSACTIONS = "last capital transactions"
 
 # ACTION dict items
 USE_GOODS = "use goods"
@@ -98,10 +99,9 @@ class SimpleCreditEnvV0(ParallelEnv):
         self.beta = self.rng.uniform(0.1, 0.9, num_players)
 
         # Market operations
-        self.demand_prices_goods = np.zeros((num_players, num_players))
-        self.offer_prices_goods = np.zeros((num_players, num_players))
-        self.demand_prices_capital = np.zeros((num_players, num_players))
-        self.offer_prices_capital = np.zeros((num_players, num_players))
+        # We can have n * (n-1) different transactions per resource
+        self.last_goods_transcations = np.zeros((num_players, num_players - 1), 2)
+        self.last_capital_transactions = np.zeros((num_players, num_players - 1), 2)
 
         observations = self.get_observations()
 
@@ -118,26 +118,14 @@ class SimpleCreditEnvV0(ParallelEnv):
         )
         # parameters are length 2 for each player
         parameters = np.stack([self.alpha, self.beta], axis=-1)
-        # potentially do not hide information here via sorting?
-        # prices has length 4 * num_players**2
-        prices = np.concatenate(
-            [
-                np.sort(x, axis=None)
-                for x in [
-                    self.demand_prices_goods,
-                    self.demand_prices_capital,
-                    self.offer_prices_goods,
-                    self.offer_prices_capital,
-                ]
-            ]
-        )
 
         return {
             self.agents[i]: {
                 PARAMS: parameters[i],
                 RESOURCES: resources[i],
                 ACCOUNTS: self.accounts[i],
-                LAST_PRICES: prices,
+                LAST_GOODS_TRANSACTIONS: self.last_goods_transactions,
+                LAST_CAPITAL_TRANSACTIONS: self.last_capital_transactions,
             }
             for i in range(self.num_players)
         }
@@ -164,9 +152,8 @@ class SimpleCreditEnvV0(ParallelEnv):
         ).squeeze()
 
     def get_order_list(self, demand, order):
-        rel_prices = np.expand_dims(demand, axis=1) / np.expand_dims(
-            order, axis=0
-        )
+        rel_prices = np.expand_dims(demand, axis=1) / np.expand_dims(order, axis=0)
+        # do np.diag or equivalent here to easily get rid of seller == buyer entries
         num_greater_1 = np.sum(rel_prices >= 1)
         inds = np.argsort(rel_prices, axis=None)[::-1]
         un_inds = np.stack(
@@ -237,39 +224,31 @@ class SimpleCreditEnvV0(ParallelEnv):
         using_goods = self.using_resources(actions, USE_GOODS)
         using_capital = self.using_resources(actions, USE_CAPITAL)
 
-        new_capital = using_goods**self.beta * using_capital ** (
-            1 - self.beta
-        )
+        new_capital = using_goods**self.beta * using_capital ** (1 - self.beta)
         if np.any(np.isnan(new_capital)):
             print(using_goods, using_capital)
 
         self.capital += new_capital
-        self.traded_goods = np.clip(
-            self.traded_goods - using_goods, 0.0, np.inf
-        )
-        self.traded_capital = np.clip(
-            self.traded_capital - using_capital, 0.0, np.inf
-        )
+        self.traded_goods = np.clip(self.traded_goods - using_goods, 0.0, np.inf)
+        self.traded_capital = np.clip(self.traded_capital - using_capital, 0.0, np.inf)
 
         # Trading
         available_goods = self.using_resources(actions, SELL_GOODS)
         available_capital = self.using_resources(actions, SELL_CAPITAL)
-        available_traded_capital = self.using_resources(
-            actions, SELL_TRADED_CAPITAL
-        )
+        available_traded_capital = self.using_resources(actions, SELL_TRADED_CAPITAL)
 
         self.demand_prices_goods = self.get_price_list(actions, BUY_GOODS_PRICE)
-        self.demand_prices_capital = self.get_price_list(
-            actions, BUY_CAPITAL_PRICE
-        )
+        self.demand_prices_capital = self.get_price_list(actions, BUY_CAPITAL_PRICE)
         self.offer_prices_goods = self.get_price_list(actions, SELL_GOODS_PRICE)
-        self.offer_prices_capital = self.get_price_list(
-            actions, SELL_CAPITAL_PRICE
-        )
+        self.offer_prices_capital = self.get_price_list(actions, SELL_CAPITAL_PRICE)
 
         demand_goods = self.using_resources(actions, BUY_GOODS)
         sold_goods = np.zeros(num_players)
         revenue = np.zeros((num_players, num_players))
+
+        # We can have n * (n-1) different transactions per resource
+        self.last_goods_transcations = np.zeros((num_players, num_players - 1, 2))
+        self.last_capital_transactions = np.zeros((num_players, num_players - 1, 2))
 
         goods_order_list = self.get_order_list(
             self.demand_prices_goods, self.offer_prices_goods
@@ -277,6 +256,7 @@ class SimpleCreditEnvV0(ParallelEnv):
         capital_order_list = self.get_order_list(
             self.demand_prices_capital, self.offer_prices_capital
         )
+        currency_counter = np.zeros(num_players)
         for buyer, seller, currency in goods_order_list:
             final_price, exchange = self.get_exchange(
                 buyer,
@@ -287,15 +267,20 @@ class SimpleCreditEnvV0(ParallelEnv):
                 available_goods,
             )
 
+            # Track the transaction
+            self.last_goods_transactions[currency, currency_counter[currency], :] = (
+                self.demand_prices_goods[buyer, currency],
+                exchange,
+            )
+            currency_counter[currency] += 1
+
             # Financial transactions
             self.accounts[buyer, currency] -= final_price
             revenue[seller, currency] += final_price
 
             # Resource transaction
             available_goods[seller] -= exchange  # how much remains to sell
-            sold_goods[
-                seller
-            ] += exchange  # how much needs to be substracted later
+            sold_goods[seller] += exchange  # how much needs to be substracted later
             self.traded_goods[buyer] += exchange
             demand_goods[buyer] -= exchange  # how much remains to buy
             self.resource_transaction(
@@ -311,6 +296,7 @@ class SimpleCreditEnvV0(ParallelEnv):
         demand_capital = self.using_resources(actions, SELL_GOODS)
         sold_capital = np.zeros(num_players)
         total_available_capital = available_capital + available_traded_capital
+        currency_counter = np.zeros(num_players)
         for buyer, seller, currency in capital_order_list:
             final_price, exchange = self.get_exchange(
                 buyer,
@@ -320,6 +306,13 @@ class SimpleCreditEnvV0(ParallelEnv):
                 demand_capital,
                 total_available_capital,
             )
+
+            # Track the transaction
+            self.last_capital_transactions[currency, currency_counter[currency], :] = (
+                self.demand_prices_capital[buyer, currency],
+                exchange,
+            )
+            currency_counter[currency] += 1
 
             # Financial transactions
             self.accounts[buyer, currency] -= final_price
@@ -404,8 +397,15 @@ class SimpleCreditEnvV0(ParallelEnv):
                 PARAMS: Box(0.0, 1.0, shape=(2,)),
                 RESOURCES: Box(0.0, np.inf, shape=(4,)),
                 ACCOUNTS: Box(-np.inf, np.inf, shape=(self.num_players,)),
-                LAST_PRICES: Box(
-                    0.0, np.inf, shape=(4 * self.num_players**2,)
+                LAST_GOODS_TRANSACTIONS: Box(
+                    0.0,
+                    np.inf,
+                    shape=(self.num_players, self.num_players - 1, 2),
+                ),
+                LAST_CAPITAL_TRANSACTIONS: Box(
+                    0.0,
+                    np.inf,
+                    shape=(self.num_players, self.num_players - 1, 2),
                 ),
             }
         )
