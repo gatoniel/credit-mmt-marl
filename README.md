@@ -28,6 +28,24 @@ Germany has released its debt brake, the EU is thinking about joint debt issuanc
 1. What kind of monetary system will the AI come up with? A credit system or a system resembling the features of Bitcoin?
 2. Which debt-surrounding rules will the AI implement?
 
+## The multi-agent game
+
+The AI model is set up as a multi-agent game where each player is an independent AI agent. The game can be separated into two separate parts, _production_ and _trade_, or _real_ and _financial_, respectively.
+
+### The _real_ part - goods and production of goods
+
+Currently, this part of the game is rather naive. It follows two-factor Cobb-Douglas functions. There are three different ressources, `energy`, `goods`, and `capital`. However, the ressources `goods` and `capital` are each separated in _self-produced_ and _bought_ to enforce trade between the players. Hence, each player $`i`$ has five ressources:
+
+- Energy $`E_i \sim \operatorname{Exp}(\lambda=1)`$ is randomly distributed and drawn at each time step.
+- Self-produced goods $´G^s_i`$ are the goods the player has produced himself so far and not sold yet.
+- Bought / traded goods $`G^t_i`$ are the goods the player has acquired from other players through trade.
+- Self-produced capital $`C^s_i`$
+- Bought / traded capital $`C^t_i`$
+
+At each timestep these quantities follow these changes:
+
+- $`\Delta G^s_i = {C^s_i}^\alpha * E_i^{1-\alpha}`$
+
 ## Features
 
 - TODO
