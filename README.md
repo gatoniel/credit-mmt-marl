@@ -37,7 +37,7 @@ The AI model is set up as a multi-agent game where each player is an independent
 Currently, this part of the game is rather naive. It follows two-factor Cobb-Douglas functions. There are three different ressources, `energy`, `goods`, and `capital`. However, the ressources `goods` and `capital` are each separated in _self-produced_ and _bought_ to enforce trade between the players. Hence, each player $`i`$ has five ressources:
 
 - Energy $`E_i \sim Exp(\lambda=1)`$ is randomly distributed and drawn at each time step.
-- Self-produced goods $´G_{s,i}`$ are the goods the player has produced himself so far and not sold yet.
+- Self-produced goods $`G_{s,i}`$ are the goods the player has produced himself so far and not sold yet.
 - Bought / traded goods $`G_{t,i}`$ are the goods the player has acquired from other players through trade.
 - Self-produced capital $`C_{s,i}`$
 - Bought / traded capital $`C_{t,i}`$
