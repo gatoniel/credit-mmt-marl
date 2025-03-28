@@ -21,6 +21,13 @@
 [pre-commit]: https://github.com/pre-commit/pre-commit
 [black]: https://github.com/psf/black
 
+## Motivation
+
+Germany has released its debt brake, the EU is thinking about joint debt issuance for defence spending, and the current US administration is trying to cut spending as much as possible. At the same time, Bitcoin and other crypto-currencies position themselves as real alternatives to government issued currencies. With this project, a multi-agent AI is forced to develop a monetary system from scratch. This will answer two questions:
+
+1. What kind of monetary system will the AI come up with? A credit system or a system resembling the features of Bitcoin?
+2. Which debt-surrounding rules will the AI implement?
+
 ## Features
 
 - TODO
